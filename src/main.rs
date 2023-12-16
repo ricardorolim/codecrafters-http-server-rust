@@ -1,13 +1,22 @@
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
+use std::str;
 
-use nom::AsBytes;
 
 fn handle_connection(mut stream :TcpStream) {
-    let mut buffer = [0; 10];
+    let mut buffer = [0; 64];
     stream.read(&mut buffer).unwrap();
 
-    let response = "HTTP/1.1 200 OK\r\n\r\n";
+    let buffer_str = str::from_utf8(&buffer).unwrap();
+
+    let mut lines = buffer_str.lines();
+    let first_line = lines.next().unwrap();
+    let words: Vec<&str> = first_line.split(' ').collect();
+    let response = match words[1] {
+        "/" => "HTTP/1.1 200 OK\r\n\r\n",
+        _ => "HTTP/1.1 404 Not Found\r\n\r\n"
+    };
+
     stream.write(response.as_bytes()).unwrap();
 }
 
