@@ -1,5 +1,7 @@
+use std::fmt::Write as _;
+use std::io::Write as _;
+use std::io::Read;
 use std::net::{TcpListener, TcpStream};
-use std::io::{Read, Write};
 use std::str;
 
 
@@ -13,17 +15,30 @@ fn handle_connection(mut stream :TcpStream) {
     let first_line = lines.next().unwrap();
     let words: Vec<&str> = first_line.split(' ').collect();
     let response = match words[1] {
-        "/" => "HTTP/1.1 200 OK\r\n\r\n",
-        _ => "HTTP/1.1 404 Not Found\r\n\r\n"
+        "/" => String::from("HTTP/1.1 200 OK\r\n\r\n"),
+        _ => {
+            if words[1].starts_with("/echo/") {
+                let parts: Vec<&str> = words[1].split("/echo/").collect();
+                let random_string:&str = parts[parts.len() - 1];
+            
+                let mut lines = String::new();
+                write!(&mut lines, "HTTP/1.1 200 OK\r\n").unwrap();
+                write!(&mut lines, "Content-Type: text/plain\r\n").unwrap();
+                write!(&mut lines, "Content-Length: {}\r\n", random_string.as_bytes().len()).unwrap();
+                write!(&mut lines, "\r\n").unwrap();
+                write!(&mut lines, "{random_string}\r\n").unwrap();
+
+                lines
+            } else {
+                String::from("HTTP/1.1 404 Not Found\r\n\r\n")
+            }
+        }
     };
 
     stream.write(response.as_bytes()).unwrap();
 }
 
 fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    println!("Logs from your program will appear here!");
-
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
