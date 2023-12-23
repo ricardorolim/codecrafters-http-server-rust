@@ -1,41 +1,65 @@
 use std::fmt::Write as _;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::Write as _;
-use std::io::Read;
 use std::net::{TcpListener, TcpStream};
 use std::str;
 
 
+const USER_AGENT_HEADER: &str = "User-Agent";
+
+
 fn handle_connection(mut stream :TcpStream) {
-    let mut buffer = [0; 64];
-    stream.read(&mut buffer).unwrap();
+    let buffer = BufReader::new(&mut stream);
+    let mut path = String::new();
+    let mut user_agent = String::new();
+    let mut first = true;
 
-    let buffer_str = str::from_utf8(&buffer).unwrap();
-
-    let mut lines = buffer_str.lines();
-    let first_line = lines.next().unwrap();
-    let words: Vec<&str> = first_line.split(' ').collect();
-    let response = match words[1] {
-        "/" => String::from("HTTP/1.1 200 OK\r\n\r\n"),
-        _ => {
-            if words[1].starts_with("/echo/") {
-                let parts: Vec<&str> = words[1].split("/echo/").collect();
-                let random_string:&str = parts[parts.len() - 1];
-            
-                let mut lines = String::new();
-                write!(&mut lines, "HTTP/1.1 200 OK\r\n").unwrap();
-                write!(&mut lines, "Content-Type: text/plain\r\n").unwrap();
-                write!(&mut lines, "Content-Length: {}\r\n", random_string.as_bytes().len()).unwrap();
-                write!(&mut lines, "\r\n").unwrap();
-                write!(&mut lines, "{random_string}\r\n").unwrap();
-
-                lines
-            } else {
-                String::from("HTTP/1.1 404 Not Found\r\n\r\n")
-            }
+    for line in buffer.lines() {
+        let line = line.unwrap();
+        if first {
+            let words: Vec<&str> = line.split(' ').collect();
+            path = String::from(words[1]);
+            first = false;
         }
+
+        if !line.contains(": ") {
+            continue;
+        }
+
+        let (header, value) = match line.split_once(": ") {
+            Some((header, value)) => (header, value),
+            None => continue
+        };
+
+        if header.starts_with(USER_AGENT_HEADER) {
+            user_agent = String::from(value);
+            break;
+        }
+    } 
+
+    let response = match &path[..] {
+        "/" => String::from("HTTP/1.1 200 OK\r\n\r\n"),
+        "/user-agent" => write_response(&user_agent),
+        path if path.starts_with("/echo") => {
+                let parts: Vec<&str> = path.split("/echo/").collect();
+                let random_string:&str = parts[parts.len() - 1];
+                write_response(random_string)
+        },
+        _ => String::from("HTTP/1.1 404 Not Found\r\n\r\n")
     };
 
     stream.write(response.as_bytes()).unwrap();
+}
+
+fn write_response(content: &str) -> String {
+    let mut lines = String::new();
+    write!(&mut lines, "HTTP/1.1 200 OK\r\n").unwrap();
+    write!(&mut lines, "Content-Type: text/plain\r\n").unwrap();
+    write!(&mut lines, "Content-Length: {}\r\n", content.as_bytes().len()).unwrap();
+    write!(&mut lines, "\r\n").unwrap();
+    write!(&mut lines, "{content}\r\n").unwrap();
+    lines
 }
 
 fn main() {
