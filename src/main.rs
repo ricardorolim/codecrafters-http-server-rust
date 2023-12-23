@@ -13,14 +13,18 @@ fn handle_connection(mut stream :TcpStream) {
     let buffer = BufReader::new(&mut stream);
     let mut path = String::new();
     let mut user_agent = String::new();
-    let mut first = true;
+    let mut start = true;
 
     for line in buffer.lines() {
         let line = line.unwrap();
-        if first {
+        if start {
             let words: Vec<&str> = line.split(' ').collect();
             path = String::from(words[1]);
-            first = false;
+            start = false;
+        }
+
+        if line == "" {
+            break;
         }
 
         if !line.contains(": ") {
@@ -34,8 +38,8 @@ fn handle_connection(mut stream :TcpStream) {
 
         if header.starts_with(USER_AGENT_HEADER) {
             user_agent = String::from(value);
-            break;
         }
+
     } 
 
     let response = match &path[..] {
@@ -69,7 +73,7 @@ fn main() {
         match stream {
             Ok(stream) => {
                 println!("accepted new connection");
-                handle_connection(stream);
+                std::thread::spawn(move || handle_connection(stream));
             }
             Err(e) => {
                 println!("error: {}", e);
